@@ -17,7 +17,7 @@
 (transient-define-argument uv-path--path ()
   "Environment Path Argument."
   :class 'transient-option
-  :shortarg "p"
+  :shortarg "pt"
   :description "Environment path"
   :always-read t
   :argument "--path="
@@ -81,24 +81,30 @@
   :description "UV lock command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-init-args-str (uv--gen-format-string 4))
+  (let* ((uv-lock-args-str (uv--gen-format-string 7))
 	 (uv-locked (uv-parse-arg-flag "--locked"   args))
 	 (uv-frozen (uv-parse-arg-flag "--frozen"   args))
 	 (uv-no-cache (uv-parse-arg-flag   "--no-cache" args))
 	 (uv-refresh (uv-parse-arg-flag "--refresh"  args))
 	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-init-args (format uv-init-args-str
+	 (uv-dry-run (uv-parse-arg-flag "--dry-run" args))
+	 (uv-upgrade (uv-parse-arg-flag "--upgrade" args))
+	 (uv-no-sources (uv-parse-arg-flag "--no-sources" args))
+	 (uv-lock-args (format uv-lock-args-str
 			       uv-python-version
 			       uv-locked
 			       uv-frozen
 			       uv-no-cache
+			       uv-dry-run
+			       uv-upgrade
+			       uv-no-sources
 			       uv-refresh)))
-    (message (format "this is the option %s" uv-init-args))
-    (compilation-start (concat uv-shell-command " " "lock" " " uv-init-args)
+    (message (format "this is the option %s" uv-lock-args))
+    (compilation-start (concat uv-shell-command " " "lock" " " uv-lock-args)
 		       nil
 		       (lambda (_) "UV LOCK"))))
 
-(transient-define-suffix uv-python-command (&optional args)
+(transient-define-suffix uv-python-install-command (&optional args)
   :key "i"
   :description "UV python install command options"
   :transient nil
@@ -118,14 +124,17 @@
 
 (transient-define-prefix uv-lock-menu ()
   "UV lock transient interface."
-  ;:init-value 'uv-init-prefix-init
   ["Options"
-   ("--locked" "" "--locked")
-   ("--frozen" "" "--frozen")
+   ("l" "" "--locked")
+   ("f" "" "--frozen")
+   ("dr" "" "--dry-run")
    ]
+  ["Resolver Options"
+   ("u" "" "--upgrade")
+   ("ns" "" "--no-sources")]
   ["Cache Options"
-   ("--no-cache" "" "--no-cache")
-   ("--refresh" "" "--refresh")]
+   ("nc" "" "--no-cache")
+   ("r" "" "--refresh")]
   ["UV Python Options"
    (uv-python-choice)]
   [["UV lock command"
@@ -133,14 +142,10 @@
 
 (transient-define-prefix uv-python-menu ()
   "UV python transient interface."
-  ;:init-value 'uv-init-prefix-init
-  ;; ["Versions"
-  ;;  (mapcar 'uv--parse-python-version (uv--get-available-python-versions))
-  ;;  ]
   ["Cache Options"
    ("--no-cache" "" "--no-cache")]
   [["UV python command"
-    (uv-python-command)]])
+    (uv-python-install-command)]])
 
 (defun uv--get-available-python-versions ()
   (let ((content (shell-command-to-string "uv python list"))
@@ -186,7 +191,7 @@
 (transient-define-argument uv-python-choice ()
   "Execution Path Argument."
   :class 'transient-option
-  :shortarg "-p"
+  :shortarg "py"
   :description "description"
   :argument "--python="
   :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
@@ -209,10 +214,10 @@
   :init-value 'uv-init-prefix-init
   ["Arguments"
    (uv-path--path) ; Done
-   ("--name" "name of the project" "--name=")
-   ("--package" "set up proj as package" "--package" :always-read t) ; Done
-   ("--no-readme" "do not create a readme file" "--no-readme") ; Done
-   ("--config-file" "configuration file path" "--config-file=")]
+   ("n" "name of the project" "--name=")
+   ("pk" "set up proj as package" "--package") ; Done
+   ("nr" "do not create a readme file" "--no-readme") ; Done
+   ("cf" "configuration file path" "--config-file=")]
   ["UV Python Options"
    (uv-python-choice)]
   [["UV init command"
@@ -222,13 +227,17 @@
   "UV sync transient interface."
   :init-value 'uv-init-prefix-init
   ["Options"
-   ("--extra" "" "--extra=")
-   ("--all-extras" "" "--all-extras" :always-read t) ; Done
-   ("--no-dev" "" "--no-dev") ; Done
-   ("--only-dev" "" "--only-dev")
-   ("--locked" "" "--locked")
-   ("--frozen" "" "--frozen")
-   ("--no-install-project" "" "--no-install-project")]
+   ("e" "" "--extra=")
+   ("ae" "" "--all-extras") ; Done
+   ("nd" "" "--no-dev") ; Done
+   ("od" "" "--only-dev")
+   ("l" "" "--locked")
+   ("f" "" "--frozen")
+   ("nip" "" "--no-install-project")
+   ("ne" "" "--no-editable")
+   ("og" "" "--only-group=")
+   ("g" "" "--group=")
+   ("ap" "" "--all-packages")]
   ["UV Python Options"
    (uv-python-choice)]
   [["UV sync command"
@@ -239,7 +248,7 @@
   :description "UV sync command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-sync-args-str (uv--gen-format-string 6))
+  (let* ((uv-sync-args-str (uv--gen-format-string 11))
 	 (uv-python-version (uv-parse-arg-flag "--python=" args))
 	 (uv-extra (uv-parse-arg-flag "--extra=" args))
 	 (uv-all-extras (uv-parse-arg-flag "--all-extras" args))
@@ -248,6 +257,10 @@
 	 (uv-locked (uv-parse-arg-flag "--locked" args))
 	 (uv-frozen (uv-parse-arg-flag "--frozen" args))
 	 (uv-no-install-project (uv-parse-arg-flag "--no-install-project" args))
+	 (uv-no-editable (uv-parse-arg-flag "--no-editable" args))
+	 (uv-only-group (uv-parse-arg-flag "--only-group=" args))
+	 (uv-group (uv-parse-arg-flag "--group=" args))
+	 (uv-all-packages (uv-parse-arg-flag "--all-packages" args))
 	 (uv-sync-args (format uv-sync-args-str
 			       uv-python-version
 			       uv-extra
@@ -256,6 +269,10 @@
 			       uv-only-dev
 			       uv-locked
 			       uv-frozen
+			       uv-no-editable
+			       uv-only-group
+			       uv-group
+			       uv-all-packages
 			       uv-no-install-project)))
     (compilation-start (concat uv-shell-command " " "sync" " " uv-sync-args)
 		       nil
@@ -305,7 +322,6 @@
 
 (transient-define-prefix uv-menu ()
   "UV transient interface."
-  ;:init-value 'uv-prefix-init
   [["New Project"
     (uv-init)
     (uv-venv)]
