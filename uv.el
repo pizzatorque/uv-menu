@@ -8,6 +8,12 @@
 					     (file-name-directory buffer-file-name)
 					   default-directory)))))
 
+(defun uv-venv-prefix-init (obj)
+  (oset obj value `(,(concat (format "--path=%s" (if
+					     buffer-file-name
+					     (file-name-directory buffer-file-name)
+					   default-directory)) ".venv"))))
+
 (transient-define-argument uv-path--path ()
   "Environment Path Argument."
   :class 'transient-option
@@ -191,7 +197,7 @@
   :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
 
 (transient-define-prefix uv-venv-menu ()
-  :init-value 'uv-init-prefix-init
+  :init-value 'uv-venv-prefix-init
   ["Arguments"
    (uv-path--path)
 ;  ["UV Venv Options"
