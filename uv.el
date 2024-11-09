@@ -1,6 +1,6 @@
 (require 'transient)
 
-(defvar uv-shell-command "uv --color never")
+(defvar uv-shell-command "uv --color=never")
 
 (defun uv-init-prefix-init (obj)
   (oset obj value `(,(format "--path=%s" (if
@@ -177,11 +177,6 @@
     (compilation-start (concat uv-shell-command " " "venv" " " uv-venv-args)
 		       nil
 		       (lambda (_) (format "UV VENV %s" uv-proj-path)))))
-
-;; (defun uv-python-set (candidate)
-;;   (cdr (assoc candidate '(("pip" . "Use pip")
-;; 			  ("setuptools" . "Use setuptools")
-;; 			  ("wheel" . "Use wheel")))))
 
 (defun uv--read-python-version-choice ()
   (interactive)
