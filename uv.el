@@ -11,6 +11,28 @@ OBJ is required by prefix."
 					     (file-name-directory buffer-file-name)
 					   default-directory)))))
 
+
+;; refactor this
+(defun uv-add-prefix-init (obj)
+  "Default prefix for the add command.
+OBJ is required by prefix."
+  ;;; refactor this
+  (let ((req-file (file-exists-p
+		   (concat (file-name-directory buffer-file-name)
+			   "requirements.txt")))
+	(req-file-dd   (file-exists-p
+			(concat default-directory "requirements.txt")))
+	(pkg (when (symbol-at-point)
+	       t)))
+    (oset obj value `(,(when (or req-file req-file-dd)
+			 (concat (format "--requirements=%s" (if req-file
+								 (file-name-directory buffer-file-name)
+							       default-directory))
+				 "requirements.txt"))
+		      ,(if pkg
+			   (format "--package=%s" (symbol-at-point))
+			 nil)))))
+
 (defun uv-venv-prefix-init (obj)
   "Default prefix for the venv command path.
 OBJ is required by prefix."
@@ -57,6 +79,8 @@ OBJ is required by prefix."
 	    concatenated-flag)
 	   ((guard (string= flag "--path="))
 	    (substring concatenated-flag 7))
+	   ((guard (string= flag "--package="))
+	    (substring concatenated-flag 10))
 	   (_
 	    concatenated-flag))))))
 
@@ -145,11 +169,11 @@ Start execution in given UV--BUFFER-NAME."
   ["Resolver Options"
    ("u" "" "--upgrade")
    ("ns" "" "--no-sources")]
-  ["Cache Options"
+  [["Cache Options"
    (uv--no-cache)
    (uv--refresh)]
   ["UV Python Options"
-   (uv-python-choice)]
+   (uv-python-choice)]]
   [["UV lock command"
     (uv-lock-command)]])
 
@@ -174,6 +198,43 @@ Start execution in given UV--BUFFER-NAME."
 (defun uv--parse-python-version (version)
   "Return the given python VERSION without periods."
   `(,version . ,(replace-regexp-in-string "\\." "" version)))
+
+(transient-define-suffix uv-add-command (&optional args)
+  :key "a"
+  :description "UV add command options"
+  :transient nil
+  (interactive (list (transient-args transient-current-command)))
+  (let* ((uv-add-args-str (uv--gen-format-string 14))
+	 (uv-pa (uv-parse-arg-flag "--package=" args))
+	 (uv-locked (uv-parse-arg-flag "--no-project" args))
+	 (uv-frozen (uv-parse-arg-flag "--seed" args))
+	 (uv-dev (uv-parse-arg-flag "--dev" args))
+	 (uv-optional (uv-parse-arg-flag "--optional=" args))
+	 (uv-editable (uv-parse-arg-flag "--editable" args))
+	 (uv-no-sync (uv-parse-arg-flag "--no-sync" args))
+	 (uv-upgrade (uv-parse-arg-flag "--upgrade" args))
+	 (uv-upgrade-package (uv-parse-arg-flag "--upgrade-package=" args))
+	 (uv-reinstall (uv-parse-arg-flag "--reinstall" args))
+	 (uv-reinstall-package (uv-parse-arg-flag "--reinstall-package=" args))
+	 (uv-no-cache (uv-parse-arg-flag "--no-cache" args))
+	 (uv-refresh (uv-parse-arg-flag "--refresh" args))
+	 (uv-python-choice (uv-parse-arg-flag "--python=" args))
+	 (uv-add-args (format
+			uv-pa
+			uv-locked
+			uv-frozen
+			uv-dev
+			uv-optional
+			uv-editable
+			uv-no-sync
+			uv-upgrade
+			uv-upgrade-package
+			uv-reinstall
+			uv-reinstall-package
+			uv-no-cache
+			uv-refresh
+			uv-python-choice)))
+    (uv--execute-command "add"  uv-add-args  "UV ADD")))
 
 (transient-define-suffix uv-venv-command (&optional args)
   :key "v"
@@ -208,6 +269,14 @@ Start execution in given UV--BUFFER-NAME."
   :argument "--python="
   :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
 
+(transient-define-argument uv-requirements-choice ()
+  "Requirements File Path Argument."
+  :class 'transient-option
+  :shortarg "-r"
+  :description "requirement file path"
+  :argument "--requirements="
+  :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
+
 (transient-define-prefix uv-venv-menu ()
   :init-value 'uv-venv-prefix-init
   ["Arguments"
@@ -219,6 +288,33 @@ Start execution in given UV--BUFFER-NAME."
    (uv-python-choice)]
   [["UV venv command"
     (uv-venv-command)]])
+
+(transient-define-prefix uv-add-menu ()
+  "UV init transient interface."
+  :init-value 'uv-add-prefix-init
+  ["Arguments"
+   ("pa" "" "--package=")]
+  ["Options"
+   (uv-requirements-choice)
+   ("l" "" "--locked")
+   ("f" "" "--frozen")
+   ("d" "" "--dev")
+   ("o" "" "--optional=")
+   ("e" "" "--editable")
+   ("ns" "" "--no-sync")]
+  [["Resolver options"
+  ("upg" "" "--upgrade")
+  ("upk" "" "--upgrade-package=")]
+  ["Installer options"
+   ("ra" "" "--reinstall")
+   ("rp" "" "--reinstall-package=")]]
+  [["Cache Options"
+   (uv--no-cache)
+   (uv--refresh)]
+  ["UV Python Options"
+   (uv-python-choice)]]
+  [["UV init command"
+    (uv-add-command)]])
 
 (transient-define-prefix uv-init-menu ()
   "UV init transient interface."
@@ -322,6 +418,13 @@ Start execution in given UV--BUFFER-NAME."
   (interactive)
   (uv-sync-menu))
 
+(transient-define-suffix uv-add ()
+  :key "a"
+  :description "Add a dependency"
+  :transient nil
+  (interactive)
+  (uv-add-menu))
+
 (transient-define-suffix uv-venv ()
   :key "o"
   :description "venv environment creation"
@@ -335,6 +438,7 @@ Start execution in given UV--BUFFER-NAME."
     (uv-init)
     (uv-venv)]
    ["Dependencies"
+    (uv-add)
     (uv-python)
     (uv-lock)
     (uv-pip)
