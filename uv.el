@@ -3,6 +3,9 @@
 
 (defvar uv-shell-command "uv --color=never")
 
+;; include uv run
+;; integrate with embark
+
 (defun uv-init-prefix-init (obj)
   "Default prefix path for the init command.
 OBJ is required by prefix."
@@ -45,7 +48,7 @@ OBJ is required by prefix."
   "Environment Path Argument."
   :class 'transient-option
   :shortarg "pt"
-  :description "Environment path"
+  :description "Environment root path"
   :always-read t
   :argument "--path="
   :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
@@ -53,13 +56,14 @@ OBJ is required by prefix."
 (transient-define-argument uv--refresh ()
   "Refresh the cache."
   :shortarg "rf"
-  :description "Refresh the cache"
+  :description "Refresh all cached data"
   :argument "--refresh")
 
 (transient-define-argument uv--no-cache ()
   "No Cache Argument."
   :shortarg "nc"
-  :description "Do not use the cache"
+  :description "Avoid reading from or writing to the cache, instead using a temporary
+directory for the duration of the operation."
   :argument "--no-cache")
 
 (defun uv-parse-arg-flag (flag args)
@@ -123,7 +127,7 @@ Start execution in given UV--BUFFER-NAME."
     (uv--execute-command "init" uv-init-args (format "UV INIT %s" uv-proj-path))))
 
 (transient-define-suffix uv-lock-command (&optional args)
-  :key "l"
+  :key "k"
   :description "UV lock command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
@@ -163,8 +167,8 @@ Start execution in given UV--BUFFER-NAME."
 (transient-define-prefix uv-lock-menu ()
   "UV lock transient interface."
   ["Options"
-   ("l" "" "--locked")
-   ("f" "" "--frozen")
+   (uv-locked-choice)
+   (uv-frozen-choice)
    ]
   ["Resolver Options"
    ("u" "" "--upgrade")
@@ -204,7 +208,7 @@ Start execution in given UV--BUFFER-NAME."
   :description "UV add command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-add-args-str (uv--gen-format-string 14))
+  (let* ((uv-add-args-str (uv--gen-format-string 15))
 	 (uv-pa (uv-parse-arg-flag "--package=" args))
 	 (uv-locked (uv-parse-arg-flag "--no-project" args))
 	 (uv-frozen (uv-parse-arg-flag "--seed" args))
@@ -218,6 +222,8 @@ Start execution in given UV--BUFFER-NAME."
 	 (uv-reinstall-package (uv-parse-arg-flag "--reinstall-package=" args))
 	 (uv-no-cache (uv-parse-arg-flag "--no-cache" args))
 	 (uv-refresh (uv-parse-arg-flag "--refresh" args))
+	 (uv-index-strategy (uv-parse-arg-flag "--index-strategy=" args))
+	 (uv-keyring-provider (uv-parse-arg-flag "--keyring-provider" args))
 	 (uv-python-choice (uv-parse-arg-flag "--python=" args))
 	 (uv-add-args (format
 			uv-pa
@@ -233,6 +239,7 @@ Start execution in given UV--BUFFER-NAME."
 			uv-reinstall-package
 			uv-no-cache
 			uv-refresh
+			uv-keyring-provider
 			uv-python-choice)))
     (uv--execute-command "add"  uv-add-args  "UV ADD")))
 
@@ -241,23 +248,32 @@ Start execution in given UV--BUFFER-NAME."
   :description "UV venv command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-venv-args-str (uv--gen-format-string 4))
+  (let* ((uv-venv-args-str (uv--gen-format-string 9))
 	 (uv-proj-path (uv-parse-arg-flag "--path=" args))
 	 (uv-no-proj (uv-parse-arg-flag "--no-project" args))
 	 (uv-seed (uv-parse-arg-flag "--seed" args))
+	 (uv-relocatable (uv-parse-arg-flag "--relocatable" args))
+	 (uv-system-site-pkg (uv-parse-arg-flag "--system-site-packages" args))
+	 (uv-index-strategy (uv-parse-arg-flag "--system-strategy=" args))
+	 (uv-link-mode (uv-parse-arg-flag "--link-mode" args))
 	 (uv-allow-existing (uv-parse-arg-flag "--allow-existing" args))
+	 (uv-keyring-provider (uv-parse-arg-flag "--keyring-provider" args))
 	 (uv-python-version (uv-parse-arg-flag "--python=" args))
 	 (uv-venv-args (format uv-venv-args-str
+			       uv-relocatable
+			       uv-system-site-pkg
+			       uv-index-strategy
+			       uv-link-mode
 			       uv-no-proj
 			       uv-python-version
 			       uv-seed
 			       uv-allow-existing
+			       uv-keyring-provider
 			       uv-proj-path)))
     (uv--execute-command "venv"  uv-venv-args (format "UV VENV %s" uv-proj-path))))
 
 (defun uv--read-python-version-choice ()
   "Prompt for a python version to choose."
-  (interactive)
   (let ((_ '(:annotation-function uv-python-set)))
 	(completing-read "Choose: " (uv--get-available-python-versions))))
 
@@ -265,7 +281,7 @@ Start execution in given UV--BUFFER-NAME."
   "Execution Path Argument."
   :class 'transient-option
   :shortarg "py"
-  :description "description"
+  :description "The Python interpreter to use for the project environment."
   :argument "--python="
   :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
 
@@ -273,17 +289,59 @@ Start execution in given UV--BUFFER-NAME."
   "Requirements File Path Argument."
   :class 'transient-option
   :shortarg "-r"
-  :description "requirement file path"
+  :description "Add all packages listed in the given requirements.txt files."
   :argument "--requirements="
   :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
 
+
+(defun uv--read-link-mode-choice ()
+  "Prompt for a python version to choose."
+  (completing-read "Choose: " '("clone" "copy" "hardlink" "symlink")))
+
+(transient-define-argument uv-link-mode-choice ()
+  "Requirements File Path Argument."
+  :class 'transient-option
+  :shortarg "lm"
+  :description "The method to use when installing packages from the global cache"
+  :argument "--link-mode="
+  :reader (lambda (_prompt _initial _history) (uv--read-link-mode-choice)))
+
+(defun uv--read-index-strategy-choice ()
+  "Prompt for a python version to choose."
+  (completing-read "Choose: " '("first-index" "unsafe-first-match" "unsafe-best-match")))
+
+(defun uv--read-keyring-provider-choice ()
+  "Prompt for a python version to choose."
+  (completing-read "Choose: " '("disabled" "subprocess")))
+
+(transient-define-argument uv-index-strategy-choice ()
+  :class 'transient-option
+  :shortarg "is"
+  :description "The strategy to use when resolving against multiple index URLs"
+  :argument "--index-strategy="
+  :reader (lambda (_prompt _initial _history) (uv--read-index-strategy-choice)))
+
+(transient-define-argument uv-keyring-provider-choice ()
+  :class 'transient-option
+  :shortarg "kr"
+  :description "Attempt to use `keyring` for authentication for index URLs"
+  :argument "--keyring-provider="
+  :reader (lambda (_prompt _initial _history) (uv--read-keyring-provider-choice)))
+
 (transient-define-prefix uv-venv-menu ()
   :init-value 'uv-venv-prefix-init
-  ["Arguments"
+  ["Options"
    (uv-path--path)
-   ("n" "d" "--no-project")
-   ("s" "d" "--seed")
-   ("a" "d" "--allow-existing")]
+   ("n" "Do not discover a project or workspace" "--no-project")
+   ("se" "Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`)
+into the virtual environment" "--seed")
+   ("a" "Preserve any existing files or directories at the target path" "--allow-existing")
+   ("sy" "Give the virtual environment access to the system site packages
+directory" "--system-site-packages")
+   ("re" "Make the virtual environment relocatable" "--relocatable")
+   (uv-index-strategy-choice)
+   (uv-link-mode-choice)
+   (uv-keyring-provider-choice)]
   ["UV Python Options"
    (uv-python-choice)]
   [["UV venv command"
@@ -296,16 +354,19 @@ Start execution in given UV--BUFFER-NAME."
    ("pa" "" "--package=")]
   ["Options"
    (uv-requirements-choice)
-   ("l" "" "--locked")
-   ("f" "" "--frozen")
+   (uv-locked-choice)
+   (uv-frozen-choice)
    ("d" "" "--dev")
    ("o" "" "--optional=")
    ("e" "" "--editable")
    ("ns" "" "--no-sync")]
+  [["Index Options"
+   (uv-index-strategy-choice)
+   (uv-keyring-provider-choice)]]
   [["Resolver options"
   ("upg" "" "--upgrade")
   ("upk" "" "--upgrade-package=")]
-  ["Installer options"
+   ["Installer options"
    ("ra" "" "--reinstall")
    ("rp" "" "--reinstall-package=")]]
   [["Cache Options"
@@ -330,21 +391,30 @@ Start execution in given UV--BUFFER-NAME."
   [["UV init command"
     (uv-init-command)]])
 
+(transient-define-argument uv-locked-choice ()
+  :class 'transient-option
+  :shortarg "lk"
+  :description "Assert that the `uv.lock` will remain unchanged"
+  :argument "--locked")
+
+(transient-define-argument uv-frozen-choice ()
+  :class 'transient-option
+  :shortarg "fr"
+  :description "Sync without updating the `uv.lock` file"
+  :argument "--frozen")
+
 (transient-define-prefix uv-sync-menu ()
   "UV sync transient interface."
   :init-value 'uv-init-prefix-init
   ["Options"
-   ("e" "" "--extra=")
-   ("ae" "" "--all-extras") ; Done
-   ("nd" "" "--no-dev") ; Done
-   ("od" "" "--only-dev")
-   ("l" "" "--locked")
-   ("f" "" "--frozen")
-   ("nip" "" "--no-install-project")
-   ("ne" "" "--no-editable")
-   ("og" "" "--only-group=")
-   ("g" "" "--group=")
-   ("ap" "" "--all-packages")]
+   ("e" "Include optional dependencies from the extra group name" "--extra=")
+   ("ae" "Include all optional dependencies" "--all-extras") ; Done
+   ("nd" "Omit development dependencies" "--no-dev") ; Done
+   ("od" "Omit non-development dependencies" "--only-dev")
+   (uv-locked-choice)
+   (uv-frozen-choice)
+   ("nip" "Do not install the current project" "--no-install-project")
+   ("ne" "Do not install any workspace members, including the root project" "--no-editable")]
   ["UV Python Options"
    (uv-python-choice)]
   [["UV sync command"
@@ -355,7 +425,7 @@ Start execution in given UV--BUFFER-NAME."
   :description "UV sync command options"
   :transient nil
   (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-sync-args-str (uv--gen-format-string 11))
+  (let* ((uv-sync-args-str (uv--gen-format-string 8))
 	 (uv-python-version (uv-parse-arg-flag "--python=" args))
 	 (uv-extra (uv-parse-arg-flag "--extra=" args))
 	 (uv-all-extras (uv-parse-arg-flag "--all-extras" args))
@@ -365,9 +435,6 @@ Start execution in given UV--BUFFER-NAME."
 	 (uv-frozen (uv-parse-arg-flag "--frozen" args))
 	 (uv-no-install-project (uv-parse-arg-flag "--no-install-project" args))
 	 (uv-no-editable (uv-parse-arg-flag "--no-editable" args))
-	 (uv-only-group (uv-parse-arg-flag "--only-group=" args))
-	 (uv-group (uv-parse-arg-flag "--group=" args))
-	 (uv-all-packages (uv-parse-arg-flag "--all-packages" args))
 	 (uv-sync-args (format uv-sync-args-str
 			       uv-python-version
 			       uv-extra
@@ -377,9 +444,6 @@ Start execution in given UV--BUFFER-NAME."
 			       uv-locked
 			       uv-frozen
 			       uv-no-editable
-			       uv-only-group
-			       uv-group
-			       uv-all-packages
 			       uv-no-install-project)))
     (uv--execute-command "sync"  uv-sync-args "UV SYNC")))
 
