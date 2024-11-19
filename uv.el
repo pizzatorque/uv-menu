@@ -20,21 +20,24 @@ OBJ is required by prefix."
   "Default prefix for the add command.
 OBJ is required by prefix."
   ;;; refactor this
-  (let ((req-file (file-exists-p
-		   (concat (file-name-directory buffer-file-name)
-			   "requirements.txt")))
-	(req-file-dd   (file-exists-p
-			(concat default-directory "requirements.txt")))
-	(pkg (when (symbol-at-point)
-	       t)))
-    (oset obj value `(,(when (or req-file req-file-dd)
-			 (concat (format "--requirements=%s" (if req-file
-								 (file-name-directory buffer-file-name)
-							       default-directory))
+  (let* ((req-file (cond ((file-exists-p
+			 (concat (file-name-directory buffer-file-name)
 				 "requirements.txt"))
+			 (concat (file-name-directory buffer-file-name)
+				 "requirements.txt"))
+			((file-exists-p
+			  (concat default-directory "requirements.txt"))
+			 (concat default-directory "requirements.txt"))
+			((and (project-current) (file-exists-p (concat (project-root (project-current)) "requirements.txt")))
+			 (concat (project-root (project-current)) "requirements.txt"))
+			(t nil)))
+	 (pkg (when (and (symbol-at-point) (not req-file))
+	       t)))
+    (oset obj value `(,(when req-file (concat (format "--requirements=%s" req-file)))
 		      ,(if pkg
 			   (format "--package=%s" (symbol-at-point))
 			 nil)))))
+
 
 (defun uv-venv-prefix-init (obj)
   "Default prefix for the venv command path.
