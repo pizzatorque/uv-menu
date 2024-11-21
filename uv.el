@@ -192,6 +192,18 @@ Start execution in given UV--BUFFER-NAME."
   [["UV python command"
     (uv-python-install-command)]])
 
+(defun uv--get-available-pip-packages ()
+  "Return the list of all installed pip packages."
+  (let ((content (shell-command-to-string "uv pip list"))
+	(pos 0)
+	matches)
+    (while (string-match "^[A-Za-z\-\_0-9]+" content pos)
+      (unless (or (string= (match-string 0 content) "Package")
+		  (string= "---------------" (match-string 0 content)))
+	(push (match-string 0 content) matches))
+      (setq pos (match-end 0)))
+    matches))
+
 (defun uv--get-available-python-versions ()
   "Return the list of all available python versions."
   (let ((content (shell-command-to-string "uv python list"))
@@ -275,6 +287,49 @@ Start execution in given UV--BUFFER-NAME."
 			       uv-proj-path)))
     (uv--execute-command "venv"  uv-venv-args (format "UV VENV %s" uv-proj-path))))
 
+(transient-define-suffix uv-pip-list-command (&optional args)
+  :key "l"
+  :description "UV pip list command options"
+  :transient nil
+  (interactive (list (transient-args transient-current-command)))
+  (let* ((uv-pip-list-args-str (uv--gen-format-string 2))
+	 (uv-editable (uv-parse-arg-flag "--editable" args))
+	 (uv-strict (uv-parse-arg-flag "--strict" args))
+	 (uv-system (uv-parse-arg-flag "--system" args))
+	 (uv-cache-option (uv-parse-arg-flag "--no-cache" args))
+	 (uv-python-version (uv-parse-arg-flag "--python=" args))
+	 (uv-venv-args (format uv-pip-list-args-str
+			       uv-editable
+			       uv-strict
+			       uv-system
+			       uv-cache-option
+			       uv-python-version)))
+    (uv--execute-command "pip list"  uv-venv-args "UV PIP LIST")))
+
+(transient-define-suffix uv-pip-show-command (&optional args)
+  :key "x"
+  :description "UV pip show command options"
+  :transient nil
+  (interactive (list (transient-args transient-current-command)))
+  (let* ((uv-pip-list-args-str (uv--gen-format-string 4))
+	 (uv-show-package (uv-parse-arg-flag "--package=" args))
+	 (uv-strict (uv-parse-arg-flag "--strict" args))
+	 (uv-system (uv-parse-arg-flag "--system" args))
+	 (uv-cache-option (uv-parse-arg-flag "--no-cache" args))
+	 (uv-python-version (uv-parse-arg-flag "--python=" args))
+	 (uv-venv-args (format uv-pip-list-args-str
+			       uv-show-package
+			       uv-strict
+			       uv-system
+			       uv-cache-option
+			       uv-python-version)))
+    (uv--execute-command "pip show"  uv-venv-args "UV PIP SHOW ")))
+
+(defun uv--read-pip-show-package ()
+  "Prompt for a python pip package to choose."
+  (let ((_ '(:annotation-function uv-python-set)))
+	(completing-read "Choose: " (uv--get-available-pip-packages))))
+
 (defun uv--read-python-version-choice ()
   "Prompt for a python version to choose."
   (let ((_ '(:annotation-function uv-python-set)))
@@ -323,6 +378,13 @@ Start execution in given UV--BUFFER-NAME."
   :description "The strategy to use when resolving against multiple index URLs"
   :argument "--index-strategy="
   :reader (lambda (_prompt _initial _history) (uv--read-index-strategy-choice)))
+
+(transient-define-argument uv--pip-show-package ()
+  :class 'transient-option
+  :shortarg "sp"
+  :description "Display an installed package"
+  :argument "--package="
+  :reader (lambda (_prompt _initial _history) (uv--read-pip-show-package)))
 
 (transient-define-argument uv-keyring-provider-choice ()
   :class 'transient-option
@@ -423,6 +485,61 @@ directory" "--system-site-packages")
   [["UV sync command"
     (uv-sync-command)]])
 
+(transient-define-prefix uv-pip-list-menu ()
+  "UV pip list transient interface."
+  ;:init-value 'uv-init-prefix-init
+  ["Options"
+   ("e" "editable" "--editable")
+   ("st" "strict" "--strict")
+   ("sy" "system" "--system")
+   ]
+  [["UV sync command"
+    (uv-pip-list-command)]])
+
+(transient-define-prefix uv-pip-show-menu ()
+  "UV pip show transient interface."
+;:init-value 'uv-init-prefix-init
+  [["Arguments"
+    (uv--pip-show-package)]
+  ["Options"
+   ("st" "strict" "--strict")
+   ("sy" "system" "--system")
+   ]]
+  [["Python Options"
+    (uv-python-choice)
+    (uv--no-cache)]]
+  [["UV show command"
+    (uv-pip-show-command)]])
+
+(transient-define-suffix uv-pip-list ()
+  :key "l"
+  :description " uv"
+  :transient t
+  (interactive)
+  (uv-pip-list-menu))
+
+(transient-define-suffix uv-pip-show ()
+  :key "s"
+  :description " uv"
+  :transient t
+  (interactive)
+  (uv-pip-show-menu))
+
+
+
+(transient-define-prefix uv-pip-menu ()
+  "UV sync transient interface."
+  :init-value 'uv-init-prefix-init
+  ["Commands"
+   (uv-pip-list)
+   (uv-pip-show)]
+   ;; ("install")
+   ;; ("uninstall")
+   ;; ("sync")]
+  ["UV Python Options"
+   (uv--no-cache)
+   ])
+
 (transient-define-suffix uv-sync-command (&optional args)
   :key "s"
   :description "UV sync command options"
@@ -462,7 +579,7 @@ directory" "--system-site-packages")
   :description "execute pip subcommands"
   :transient nil
   (interactive)
-  (message "Placeholder: Executed pip!"))
+  (uv-pip-menu))
 
 (transient-define-suffix uv-lock ()
   :key "l"
