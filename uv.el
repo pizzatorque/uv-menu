@@ -3,17 +3,39 @@
 
 (defvar uv-shell-command "uv --color=never")
 
-;; include uv run
+(defgroup uv-commands nil "")
+
+(defcustom uv-requirements-filename "requirements.txt"
+  "Name of the requirements file."
+  :group 'uv-commands
+  :type '(string))
+
+(defcustom uv-project-file "pyproject.toml"
+  "Name of the package configuration file."
+  :group 'uv-commands
+  :type '(string))
+
+(defcustom uv-venv-path ".venv"
+  "Path to the project's venv."
+  :group 'uv-commands
+  :type '(string))
+
+;; TODO
+;; finish uv run
 ;; integrate with embark
+;; Make a macro for the commands
 
 (defun uv-init-prefix-init (obj)
   "Default prefix path for the init command.
 OBJ is required by prefix."
-  (oset obj value `(,(format "--path=%s" (if
-					     buffer-file-name
-					     (file-name-directory buffer-file-name)
-					   default-directory)))))
+  (oset obj value `(,(format "--path=%s" (cond
+					     ((buffer-file-name)
+					      (file-name-directory buffer-file-name))
+					     ((project-current)
+					      (project-root (project-current)))
+					     (t default-directory))))))
 
+;(defun uv--get-default-dir ())
 
 ;; refactor this
 (defun uv-add-prefix-init (obj)
@@ -21,15 +43,15 @@ OBJ is required by prefix."
 OBJ is required by prefix."
   ;;; refactor this
   (let* ((req-file (cond ((file-exists-p
-			 (concat (file-name-directory buffer-file-name)
-				 "requirements.txt"))
-			 (concat (file-name-directory buffer-file-name)
-				 "requirements.txt"))
+			   (concat (file-name-directory buffer-file-name)
+				 uv-requirements-filename))
+			  (concat (file-name-directory buffer-file-name)
+				 uv-requirements-filename))
 			((file-exists-p
-			  (concat default-directory "requirements.txt"))
-			 (concat default-directory "requirements.txt"))
-			((and (project-current) (file-exists-p (concat (project-root (project-current)) "requirements.txt")))
-			 (concat (project-root (project-current)) "requirements.txt"))
+			  (concat default-directory uv-requirements-filename))
+			 (concat default-directory uv-requirements-filename))
+			((and (project-current) (file-exists-p (concat (project-root (project-current)) uv-requirements-filename)))
+			 (concat (project-root (project-current)) uv-requirements-filename))
 			(t nil)))
 	 (pkg (when (and (symbol-at-point) (not req-file))
 	       t)))
@@ -42,10 +64,13 @@ OBJ is required by prefix."
 (defun uv-venv-prefix-init (obj)
   "Default prefix for the venv command path.
 OBJ is required by prefix."
-  (oset obj value `(,(concat (format "--path=%s" (if
-					     buffer-file-name
-					     (file-name-directory buffer-file-name)
-					   default-directory)) ".venv"))))
+  (oset obj value `(,(concat (format "--path=%s" (concat (cond
+							  ((project-current)
+							   (project-root (project-current)))
+							  ((buffer-file-name)
+							   (file-name-directory buffer-file-name))
+							  (t default-directory))
+							 uv-venv-path))))))
 
 (transient-define-argument uv-path--path ()
   "Environment Path Argument."
@@ -55,6 +80,15 @@ OBJ is required by prefix."
   :always-read t
   :argument "--path="
   :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
+
+(transient-define-argument uv-run--command ()
+  "Run Command Argument."
+  :class 'transient-option
+  :shortarg "c"
+  :description "Run Command"
+  :always-read t
+  :argument "--command=")
+
 
 (transient-define-argument uv--refresh ()
   "Refresh the cache."
@@ -85,9 +119,13 @@ directory for the duration of the operation."
 	   ((guard (string= concatenated-flag flag))
 	    concatenated-flag)
 	   ((guard (string= flag "--path="))
-	    (substring concatenated-flag 7))
+	    (substring concatenated-flag (length "--path=")))
 	   ((guard (string= flag "--package="))
-	    (substring concatenated-flag 10))
+	    (substring concatenated-flag (length "--package=")))
+	   ((guard (string= flag "--src="))
+	    (substring concatenated-flag (length "--src=")))
+	   ((guard (string= flag "--command="))
+	    (substring concatenated-flag (length "--command=")))
 	   (_
 	    concatenated-flag))))))
 
@@ -184,6 +222,10 @@ Start execution in given UV--BUFFER-NAME."
   [["UV lock command"
     (uv-lock-command)]])
 
+(transient-define-prefix uv-python-test ()
+  "UV python transient interface."
+  ["Cache Options"])
+
 (transient-define-prefix uv-python-menu ()
   "UV python transient interface."
   ["Cache Options"
@@ -217,6 +259,16 @@ Start execution in given UV--BUFFER-NAME."
 (defun uv--parse-python-version (version)
   "Return the given python VERSION without periods."
   `(,version . ,(replace-regexp-in-string "\\." "" version)))
+
+(transient-define-suffix uv-run-command (&optional args)
+  :key "r"
+  :description "UV add command options"
+  :transient nil
+  (interactive (list (transient-args transient-current-command)))
+  (let* ((uv-run-args-str (uv--gen-format-string 1))
+	 (uv-run-command (uv-parse-arg-flag "--command=" args))
+	 (uv-run-args (format uv-run-command)))
+	 (uv--execute-command "run"  uv-run-args  "UV RUN")))
 
 (transient-define-suffix uv-add-command (&optional args)
   :key "a"
@@ -260,7 +312,7 @@ Start execution in given UV--BUFFER-NAME."
 
 (transient-define-suffix uv-venv-command (&optional args)
   :key "v"
-  :description "UV venv command options"
+  :description "UV venv creation."
   :transient nil
   (interactive (list (transient-args transient-current-command)))
   (let* ((uv-venv-args-str (uv--gen-format-string 9))
@@ -306,6 +358,9 @@ Start execution in given UV--BUFFER-NAME."
 			       uv-python-version)))
     (uv--execute-command "pip list"  uv-venv-args "UV PIP LIST")))
 
+
+;; TODO
+;; Make a macro for these
 (transient-define-suffix uv-pip-show-command (&optional args)
   :key "x"
   :description "UV pip show command options"
@@ -351,6 +406,13 @@ Start execution in given UV--BUFFER-NAME."
   :argument "--requirements="
   :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
 
+(transient-define-argument uv-sync-requirements-choice ()
+  "Requirements File Path Argument."
+  :class 'transient-option
+  :shortarg "src"
+  :description "Include all packages listed in the given requirements.txt file."
+  :argument "--src="
+  :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
 
 (defun uv--read-link-mode-choice ()
   "Prompt for a python version to choose."
@@ -432,7 +494,7 @@ directory" "--system-site-packages")
   ("upg" "" "--upgrade")
   ("upk" "" "--upgrade-package=")]
    ["Installer options"
-   ("ra" "" "--reinstall")
+   ("ri" "" "--reinstall")
    ("rp" "" "--reinstall-package=")]]
   [["Cache Options"
    (uv--no-cache)
@@ -468,13 +530,19 @@ directory" "--system-site-packages")
   :description "Sync without updating the `uv.lock` file"
   :argument "--frozen")
 
+(transient-define-argument uv-no-dev-choice ()
+  :class 'transient-option
+  :shortarg "nd"
+  :description  "Omit development dependencies"
+  :argument "--no-dev")
+
 (transient-define-prefix uv-sync-menu ()
   "UV sync transient interface."
   :init-value 'uv-init-prefix-init
   ["Options"
    ("e" "Include optional dependencies from the extra group name" "--extra=")
    ("ae" "Include all optional dependencies" "--all-extras") ; Done
-   ("nd" "Omit development dependencies" "--no-dev") ; Done
+   (no-dev-choice) ; Done
    ("od" "Omit non-development dependencies" "--only-dev")
    (uv-locked-choice)
    (uv-frozen-choice)
@@ -511,34 +579,108 @@ directory" "--system-site-packages")
   [["UV show command"
     (uv-pip-show-command)]])
 
+
+
+(transient-define-prefix uv-pip-sync-menu ()
+  "UV pip sync transient interface."
+;:init-value 'uv-init-prefix-init
+  [["Arguments"
+    (uv-sync-requirements-choice)]
+   ["Options"
+    ("nb" "" "--no-build")
+    ("ny" "" "--no-binary")
+    ("oy" "" "--only-binary")
+    ("aer" "" "--allow-empty-requirements")
+    ("naer" "" "--no-allow-empty-requirements")
+    ("nsp" "Do not break system packages" "--no-break-system-packages")
+    ("sy" "system" "--system")
+   ]]
+  [["Installer Options"
+    ("ri"
+     "Resintall all packages, regardless of whether they're already installed."
+     "--reinstall")]]
+  [["Python Options"
+    (uv-python-choice)
+    (uv--no-cache)]]
+  [["UV show command"
+    (uv-pip-sync-command)]])
+
 (transient-define-suffix uv-pip-list ()
   :key "l"
-  :description " uv"
+  :description "list"
   :transient t
   (interactive)
   (uv-pip-list-menu))
 
 (transient-define-suffix uv-pip-show ()
-  :key "s"
-  :description " uv"
+  :key "sh"
+  :description " show"
   :transient t
   (interactive)
   (uv-pip-show-menu))
 
-
+(transient-define-suffix uv-pip-sync ()
+  :key "sy"
+  :description "sync"
+  :transient t
+  (interactive)
+  (uv-pip-sync-menu))
 
 (transient-define-prefix uv-pip-menu ()
   "UV sync transient interface."
   :init-value 'uv-init-prefix-init
   ["Commands"
    (uv-pip-list)
-   (uv-pip-show)]
+   (uv-pip-show)
    ;; ("install")
    ;; ("uninstall")
-   ;; ("sync")]
+   (uv-pip-sync)]
   ["UV Python Options"
    (uv--no-cache)
    ])
+
+(transient-define-prefix uv-run-menu ()
+  "UV run command transient interface"
+  :init-value 'uv-init-prefix-init
+  ["Command"
+   (uv-run--command)
+   (uv-run-command)]
+  ["Run Options"
+   (uv-locked-choice)
+   (uv-frozen-choice)
+   (uv-no-dev-choice)
+   ("iso" "Run the command in an isolated virtual environment" "--isolated")])
+
+(transient-define-suffix uv-pip-sync-command (&optional args)
+  :key "ps"
+  :description "UV pip sync command"
+  :transient nil
+  (interactive (list (transient-args transient-current-command)))
+  (let* ((uv-sync-args-str (uv--gen-format-string 10))
+	 (uv-python-version (uv-parse-arg-flag "--python=" args))
+	 (uv-no-cache (uv-parse-arg-flag "--no-cache" args))
+	 (uv-no-break-sp (uv-parse-arg-flag "--no-break-system-packages" args))
+	 (uv-system (uv-parse-arg-flag "--system" args))
+	 (uv-reinstall (uv-parse-arg-flag "--reinstall" args))
+	 (uv-no-build (uv-parse-arg-flag "--no-build" args))
+	 (uv-no-binary (uv-parse-arg-flag "--no-binary" args))
+	 (uv-allow-empty-reqs (uv-parse-arg-flag "--allow-empty-requirements" args))
+	 (uv-no-empty-reqs (uv-parse-arg-flag "--no-allow-empty-requirements" args))
+	 (uv-python-platform (uv-parse-arg-flag "--python-platform" args))
+	 (uv-source-file (uv-parse-arg-flag "--src=" args))
+	 (uv-sync-args (format uv-sync-args-str
+			       uv-python-platform
+			       uv-no-empty-reqs
+			       uv-allow-empty-reqs
+			       uv-no-binary
+			       uv-no-build
+			       uv-reinstall
+			       uv-system
+			       uv-no-break-sp
+			       uv-no-cache
+			       uv-python-version
+			       uv-source-file)))
+    (uv--execute-command "pip sync"  uv-sync-args "UV PIP SYNC")))
 
 (transient-define-suffix uv-sync-command (&optional args)
   :key "s"
@@ -616,6 +758,13 @@ directory" "--system-site-packages")
   (interactive)
   (uv-venv-menu))
 
+(transient-define-suffix uv-run ()
+  :key "r"
+  :description "Run command menu"
+  :transient nil
+  (interactive)
+  (uv-run-menu))
+
 (transient-define-prefix uv-menu ()
   "UV transient interface."
   [["New Project"
@@ -626,6 +775,8 @@ directory" "--system-site-packages")
     (uv-python)
     (uv-lock)
     (uv-pip)
-    (uv-sync)]])
+    (uv-sync)]
+   ["Run"
+    (uv-run)]])
 
 (provide 'uv)
