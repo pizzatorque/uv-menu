@@ -1,3 +1,5 @@
+;; -*- lexical-binding: t; -*-
+
 (require 'transient)
 (require 'project)
 
@@ -23,7 +25,6 @@
 ;; TODO
 ;; finish uv run
 ;; integrate with embark
-;; Make a macro for the commands
 
 (defun uv-init-prefix-init (obj)
   "Default prefix path for the init command.
@@ -146,64 +147,6 @@ Start execution in given UV--BUFFER-NAME."
 		       nil
 		       (lambda (_) uv--buffer-name))))
 
-(transient-define-suffix uv-init-command (&optional args)
-  :key "t"
-  :description "UV init command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-init-args-str (uv--gen-format-string 5))
-	 (uv-proj-path (uv-parse-arg-flag "--path=" args))
-	 (uv-proj-name (uv-parse-arg-flag "--name=" args))
-	 (uv-package (uv-parse-arg-flag "--package" args))
-	 (uv-no-readme (uv-parse-arg-flag "--no-readme" args))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-config-file-path (uv-parse-arg-flag "--config-file=" args))
-	 (uv-init-args (format uv-init-args-str
-			       uv-proj-name
-			       uv-package
-			       uv-no-readme
-			       uv-python-version
-			       uv-config-file-path
-			       uv-proj-path)))
-    (uv--execute-command "init" uv-init-args (format "UV INIT %s" uv-proj-path))))
-
-(transient-define-suffix uv-lock-command (&optional args)
-  :key "k"
-  :description "UV lock command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-lock-args-str (uv--gen-format-string 6))
-	 (uv-locked (uv-parse-arg-flag "--locked"   args))
-	 (uv-frozen (uv-parse-arg-flag "--frozen"   args))
-	 (uv-no-cache (uv-parse-arg-flag   "--no-cache" args))
-	 (uv-refresh (uv-parse-arg-flag "--refresh"  args))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-upgrade (uv-parse-arg-flag "--upgrade" args))
-	 (uv-no-sources (uv-parse-arg-flag "--no-sources" args))
-	 (uv-lock-args (format uv-lock-args-str
-			       uv-python-version
-			       uv-locked
-			       uv-frozen
-			       uv-no-cache
-			       uv-upgrade
-			       uv-no-sources
-			       uv-refresh)))
-    (uv--execute-command "lock" uv-lock-args "UV LOCK")))
-
-(transient-define-suffix uv-python-install-command (&optional args)
-  :key "i"
-  :description "UV python install command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-python-args-str (uv--gen-format-string 2))
-	 (uv-no-cache (uv-parse-arg-flag   "--no-cache" args))
-	 (uv-refresh (uv-parse-arg-flag "--refresh"  args))
-	 (uv-python-version (uv--read-python-version-choice))
-	 (uv-python-args (format uv-python-args-str
-			       uv-no-cache
-			       uv-refresh
-			       uv-python-version)))
-    (uv--execute-command "python install" uv-python-args "UV PYTHON INSTALL")))
 
 (transient-define-prefix uv-lock-menu ()
   "UV lock transient interface."
@@ -259,126 +202,6 @@ Start execution in given UV--BUFFER-NAME."
 (defun uv--parse-python-version (version)
   "Return the given python VERSION without periods."
   `(,version . ,(replace-regexp-in-string "\\." "" version)))
-
-(transient-define-suffix uv-run-command (&optional args)
-  :key "r"
-  :description "UV add command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-run-args-str (uv--gen-format-string 1))
-	 (uv-run-command (uv-parse-arg-flag "--command=" args))
-	 (uv-run-args (format uv-run-command)))
-	 (uv--execute-command "run"  uv-run-args  "UV RUN")))
-
-(transient-define-suffix uv-add-command (&optional args)
-  :key "a"
-  :description "UV add command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-add-args-str (uv--gen-format-string 15))
-	 (uv-pa (uv-parse-arg-flag "--package=" args))
-	 (uv-locked (uv-parse-arg-flag "--no-project" args))
-	 (uv-frozen (uv-parse-arg-flag "--seed" args))
-	 (uv-dev (uv-parse-arg-flag "--dev" args))
-	 (uv-optional (uv-parse-arg-flag "--optional=" args))
-	 (uv-editable (uv-parse-arg-flag "--editable" args))
-	 (uv-no-sync (uv-parse-arg-flag "--no-sync" args))
-	 (uv-upgrade (uv-parse-arg-flag "--upgrade" args))
-	 (uv-upgrade-package (uv-parse-arg-flag "--upgrade-package=" args))
-	 (uv-reinstall (uv-parse-arg-flag "--reinstall" args))
-	 (uv-reinstall-package (uv-parse-arg-flag "--reinstall-package=" args))
-	 (uv-no-cache (uv-parse-arg-flag "--no-cache" args))
-	 (uv-refresh (uv-parse-arg-flag "--refresh" args))
-	 (uv-index-strategy (uv-parse-arg-flag "--index-strategy=" args))
-	 (uv-keyring-provider (uv-parse-arg-flag "--keyring-provider" args))
-	 (uv-python-choice (uv-parse-arg-flag "--python=" args))
-	 (uv-add-args (format
-			uv-pa
-			uv-locked
-			uv-frozen
-			uv-dev
-			uv-optional
-			uv-editable
-			uv-no-sync
-			uv-upgrade
-			uv-upgrade-package
-			uv-reinstall
-			uv-reinstall-package
-			uv-no-cache
-			uv-refresh
-			uv-keyring-provider
-			uv-python-choice)))
-    (uv--execute-command "add"  uv-add-args  "UV ADD")))
-
-(transient-define-suffix uv-venv-command (&optional args)
-  :key "v"
-  :description "UV venv creation."
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-venv-args-str (uv--gen-format-string 9))
-	 (uv-proj-path (uv-parse-arg-flag "--path=" args))
-	 (uv-no-proj (uv-parse-arg-flag "--no-project" args))
-	 (uv-seed (uv-parse-arg-flag "--seed" args))
-	 (uv-relocatable (uv-parse-arg-flag "--relocatable" args))
-	 (uv-system-site-pkg (uv-parse-arg-flag "--system-site-packages" args))
-	 (uv-index-strategy (uv-parse-arg-flag "--system-strategy=" args))
-	 (uv-link-mode (uv-parse-arg-flag "--link-mode" args))
-	 (uv-allow-existing (uv-parse-arg-flag "--allow-existing" args))
-	 (uv-keyring-provider (uv-parse-arg-flag "--keyring-provider" args))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-venv-args (format uv-venv-args-str
-			       uv-relocatable
-			       uv-system-site-pkg
-			       uv-index-strategy
-			       uv-link-mode
-			       uv-no-proj
-			       uv-python-version
-			       uv-seed
-			       uv-allow-existing
-			       uv-keyring-provider
-			       uv-proj-path)))
-    (uv--execute-command "venv"  uv-venv-args (format "UV VENV %s" uv-proj-path))))
-
-(transient-define-suffix uv-pip-list-command (&optional args)
-  :key "l"
-  :description "UV pip list command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-pip-list-args-str (uv--gen-format-string 2))
-	 (uv-editable (uv-parse-arg-flag "--editable" args))
-	 (uv-strict (uv-parse-arg-flag "--strict" args))
-	 (uv-system (uv-parse-arg-flag "--system" args))
-	 (uv-cache-option (uv-parse-arg-flag "--no-cache" args))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-venv-args (format uv-pip-list-args-str
-			       uv-editable
-			       uv-strict
-			       uv-system
-			       uv-cache-option
-			       uv-python-version)))
-    (uv--execute-command "pip list"  uv-venv-args "UV PIP LIST")))
-
-
-;; TODO
-;; Make a macro for these
-(transient-define-suffix uv-pip-show-command (&optional args)
-  :key "x"
-  :description "UV pip show command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-pip-list-args-str (uv--gen-format-string 4))
-	 (uv-show-package (uv-parse-arg-flag "--package=" args))
-	 (uv-strict (uv-parse-arg-flag "--strict" args))
-	 (uv-system (uv-parse-arg-flag "--system" args))
-	 (uv-cache-option (uv-parse-arg-flag "--no-cache" args))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-venv-args (format uv-pip-list-args-str
-			       uv-show-package
-			       uv-strict
-			       uv-system
-			       uv-cache-option
-			       uv-python-version)))
-    (uv--execute-command "pip show"  uv-venv-args "UV PIP SHOW ")))
 
 (defun uv--read-pip-show-package ()
   "Prompt for a python pip package to choose."
@@ -579,8 +402,6 @@ directory" "--system-site-packages")
   [["UV show command"
     (uv-pip-show-command)]])
 
-
-
 (transient-define-prefix uv-pip-sync-menu ()
   "UV pip sync transient interface."
 ;:init-value 'uv-init-prefix-init
@@ -650,64 +471,6 @@ directory" "--system-site-packages")
    (uv-frozen-choice)
    (uv-no-dev-choice)
    ("iso" "Run the command in an isolated virtual environment" "--isolated")])
-
-(transient-define-suffix uv-pip-sync-command (&optional args)
-  :key "ps"
-  :description "UV pip sync command"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-sync-args-str (uv--gen-format-string 10))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-no-cache (uv-parse-arg-flag "--no-cache" args))
-	 (uv-no-break-sp (uv-parse-arg-flag "--no-break-system-packages" args))
-	 (uv-system (uv-parse-arg-flag "--system" args))
-	 (uv-reinstall (uv-parse-arg-flag "--reinstall" args))
-	 (uv-no-build (uv-parse-arg-flag "--no-build" args))
-	 (uv-no-binary (uv-parse-arg-flag "--no-binary" args))
-	 (uv-allow-empty-reqs (uv-parse-arg-flag "--allow-empty-requirements" args))
-	 (uv-no-empty-reqs (uv-parse-arg-flag "--no-allow-empty-requirements" args))
-	 (uv-python-platform (uv-parse-arg-flag "--python-platform" args))
-	 (uv-source-file (uv-parse-arg-flag "--src=" args))
-	 (uv-sync-args (format uv-sync-args-str
-			       uv-python-platform
-			       uv-no-empty-reqs
-			       uv-allow-empty-reqs
-			       uv-no-binary
-			       uv-no-build
-			       uv-reinstall
-			       uv-system
-			       uv-no-break-sp
-			       uv-no-cache
-			       uv-python-version
-			       uv-source-file)))
-    (uv--execute-command "pip sync"  uv-sync-args "UV PIP SYNC")))
-
-(transient-define-suffix uv-sync-command (&optional args)
-  :key "s"
-  :description "UV sync command options"
-  :transient nil
-  (interactive (list (transient-args transient-current-command)))
-  (let* ((uv-sync-args-str (uv--gen-format-string 8))
-	 (uv-python-version (uv-parse-arg-flag "--python=" args))
-	 (uv-extra (uv-parse-arg-flag "--extra=" args))
-	 (uv-all-extras (uv-parse-arg-flag "--all-extras" args))
-	 (uv-no-dev (uv-parse-arg-flag "--no-dev" args))
-	 (uv-only-dev (uv-parse-arg-flag "--only-dev" args))
-	 (uv-locked (uv-parse-arg-flag "--locked" args))
-	 (uv-frozen (uv-parse-arg-flag "--frozen" args))
-	 (uv-no-install-project (uv-parse-arg-flag "--no-install-project" args))
-	 (uv-no-editable (uv-parse-arg-flag "--no-editable" args))
-	 (uv-sync-args (format uv-sync-args-str
-			       uv-python-version
-			       uv-extra
-			       uv-all-extras
-			       uv-no-dev
-			       uv-only-dev
-			       uv-locked
-			       uv-frozen
-			       uv-no-editable
-			       uv-no-install-project)))
-    (uv--execute-command "sync"  uv-sync-args "UV SYNC")))
 
 (transient-define-suffix uv-init ()
   :key "i"
@@ -779,4 +542,119 @@ directory" "--system-site-packages")
    ["Run"
     (uv-run)]])
 
+(defmacro uv--generate-transient-suffix-command (name command-name key description  &rest re)
+  "Generate a transient suffix command.
+Name it with given NAME which executes COMMAND-NAME.
+Command can be invoked with given KEY, displaying the given
+DESCRIPTION.  Apply all RE params to the shell command."
+  `(let* ((flags
+           (mapcar (lambda (v)
+                     (format "%s" v))
+                   ',re))
+	  (parsed-flags (mapcar (lambda (flag)
+                                  (lambda (args)
+                                    (uv-parse-arg-flag flag args)))
+			        flags)))
+     (transient-define-suffix ,(intern (format "%s" name)) (&optional args)
+        :key ,key
+        :description ,description
+        (interactive (list (transient-args transient-current-command)))
+        (let* ((uv-args (mapcar (lambda (func) (funcall func args)) parsed-flags)))
+          (uv--execute-command ,command-name
+                               (mapconcat (apply-partially 'format "%s") uv-args " ")
+                               (format "UV %s" ',name))))))
+
+(uv--generate-transient-suffix-command uv-pip-sync-command
+					"pip sync"
+					"ps"
+					"UV pip sync command"
+					"--python="
+					"--no-cache"
+					"--no-break-system-packages"
+					"--system"
+					"--reinstall"
+					"--no-build"
+					"--no-binary"
+					"--allow-empty-requirements"
+					"--no-allow-empty-requirements"
+					"--python-platform"
+					"--src="
+					)
+
+(uv--generate-transient-suffix-command uv-init-command "init" "t" "UV init"
+				       "--path="
+				       "--name="
+				       "--package"
+				       "--no-readme"
+				       "--python="
+				       "--config-file="
+				       )
+
+
+(uv--generate-transient-suffix-command uv-python-install-command "python install" "i" "UV python install"
+				       "--no-cache"
+				       "--refresh"
+				       ;; TODO
+				       ;; uv--read-python-version-choice
+
+(uv--generate-transient-suffix-command uv-pip-list-command "pip list" "l" "UV pip list"
+				       "--editable"
+				       "--strict"
+				       "--system"
+				       "--no-cache"
+				       "--python="
+				       )
+
+(uv--generate-transient-suffix-command uv-pip-show-command
+				       "pip show"
+				       "x"
+				       "UV pip show"
+				       "--package="
+				       "--strict"
+				       "--system"
+				       "--no-cache"
+				       "--python=")
+
+(uv--generate-transient-suffix-command uv-venv-command "venv" "v" "UV venv"
+				       "--path="
+				       "--no-project"
+				       "--seed"
+				       "--relocatable"
+				       "--system-site-packages"
+				       "--system-strategy="
+				       "--link-mode"
+				       "--allow-existing"
+				       "--keyring-provider"
+				       "--python=")
+
+(uv--generate-transient-suffix-command uv-lock-command "lock" "k" "UV lock"
+				       "--locked"
+				       "--frozen"
+				       "--no-cache"
+				       "--refresh"
+				       "--python="
+				       "--upgrade"
+				       "--no-sources"
+				       )
+
+(uv--generate-transient-suffix-command uv-add-command "add" "a" "UV add"
+				       "--package="
+				       "--no-project"
+				       "--seed"
+				       "--dev"
+				       "--optional="
+				       "--editable"
+				       "--no-sync"
+				       "--upgrade"
+				       "--upgrade-package="
+				       "--reinstall"
+				       "--reinstall-package="
+				       "--no-cache"
+				       "--refresh"
+				       "--index-strategy="
+				       "--keyring-provider"
+				       "--python=")
+
+(uv--generate-transient-suffix-command uv-run-command "run" "r" "Run command"
+				       "--command=")
 (provide 'uv)
