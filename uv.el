@@ -2,6 +2,7 @@
 
 (require 'transient)
 (require 'project)
+(require 'f)
 
 (defvar uv-shell-command "uv --color=never")
 
@@ -23,7 +24,6 @@
   :type '(string))
 
 ;; TODO
-;; finish uv run
 ;; integrate with embark
 
 (defun uv-init-prefix-init (obj)
@@ -38,7 +38,6 @@ OBJ is required by prefix."
 
 ;(defun uv--get-default-dir ())
 
-;; refactor this
 (defun uv-add-prefix-init (obj)
   "Default prefix for the add command.
 OBJ is required by prefix."
@@ -48,11 +47,11 @@ OBJ is required by prefix."
 				 uv-requirements-filename))
 			  (concat (file-name-directory buffer-file-name)
 				 uv-requirements-filename))
-			((file-exists-p
+			 ((file-exists-p
 			  (concat default-directory uv-requirements-filename))
-			 (concat default-directory uv-requirements-filename))
-			((and (project-current) (file-exists-p (concat (project-root (project-current)) uv-requirements-filename)))
-			 (concat (project-root (project-current)) uv-requirements-filename))
+			  (concat default-directory uv-requirements-filename))
+			 ((and (project-current) (file-exists-p (concat (project-root (project-current)) uv-requirements-filename)))
+			  (concat (project-root (project-current)) uv-requirements-filename))
 			(t nil)))
 	 (pkg (when (and (symbol-at-point) (not req-file))
 	       t)))
@@ -123,6 +122,8 @@ directory for the duration of the operation."
 	    (substring concatenated-flag (length "--path=")))
 	   ((guard (string= flag "--package="))
 	    (substring concatenated-flag (length "--package=")))
+	   ((guard (string= flag "--packages="))
+	    (substring concatenated-flag (length "--packages=")))
 	   ((guard (string= flag "--src="))
 	    (substring concatenated-flag (length "--src=")))
 	   ((guard (string= flag "--command="))
@@ -203,6 +204,7 @@ Start execution in given UV--BUFFER-NAME."
   "Return the given python VERSION without periods."
   `(,version . ,(replace-regexp-in-string "\\." "" version)))
 
+;; Refactor into one
 (defun uv--read-pip-show-package ()
   "Prompt for a python pip package to choose."
   (let ((_ '(:annotation-function uv-python-set)))
@@ -228,6 +230,15 @@ Start execution in given UV--BUFFER-NAME."
   :description "Add all packages listed in the given requirements.txt files."
   :argument "--requirements="
   :reader (lambda (_prompt _initial _history) (read-file-name _prompt)))
+
+(transient-define-argument uv-requirement-choice ()
+  "Requirements File Path Argument."
+  :class 'transient-option
+  :shortarg "-r"
+  :description "Add all packages listed in the given requirements.txt files."
+  :argument "--requirement="
+  :reader (lambda (_prompt _initial _history) (f-filename (read-file-name _prompt))))
+
 
 (transient-define-argument uv-sync-requirements-choice ()
   "Requirements File Path Argument."
@@ -331,10 +342,10 @@ directory" "--system-site-packages")
   "UV init transient interface."
   :init-value 'uv-init-prefix-init
   ["Arguments"
-   (uv-path--path) ; Done
+   (uv-path--path)
    ("na" "name of the project" "--name=")
-   ("pk" "set up proj as package" "--package") ; Done
-   ("nr" "do not create a readme file" "--no-readme") ; Done
+   ("pk" "set up proj as package" "--package")
+   ("nr" "do not create a readme file" "--no-readme")
    ("cf" "configuration file path" "--config-file=")]
   ["UV Python Options"
    (uv-python-choice)]
@@ -364,8 +375,8 @@ directory" "--system-site-packages")
   :init-value 'uv-init-prefix-init
   ["Options"
    ("e" "Include optional dependencies from the extra group name" "--extra=")
-   ("ae" "Include all optional dependencies" "--all-extras") ; Done
-   (no-dev-choice) ; Done
+   ("ae" "Include all optional dependencies" "--all-extras")
+   (no-dev-choice)
    ("od" "Omit non-development dependencies" "--only-dev")
    (uv-locked-choice)
    (uv-frozen-choice)
@@ -378,7 +389,6 @@ directory" "--system-site-packages")
 
 (transient-define-prefix uv-pip-list-menu ()
   "UV pip list transient interface."
-  ;:init-value 'uv-init-prefix-init
   ["Options"
    ("e" "editable" "--editable")
    ("st" "strict" "--strict")
@@ -389,7 +399,6 @@ directory" "--system-site-packages")
 
 (transient-define-prefix uv-pip-show-menu ()
   "UV pip show transient interface."
-;:init-value 'uv-init-prefix-init
   [["Arguments"
     (uv--pip-show-package)]
   ["Options"
@@ -402,9 +411,59 @@ directory" "--system-site-packages")
   [["UV show command"
     (uv-pip-show-command)]])
 
+(transient-define-prefix uv-pip-install-menu ()
+  "UV pip install transient interface."
+  [["Arguments"
+    ("pa" "" "--packages=")
+    ]
+   ["Options"
+    (uv-requirement-choice)
+    ("ed" "" "--editable")
+    ("ex" "Include optional dependencies from the extra group name" "--extra=")
+    ("nd" "" "--no-deps")
+    ("sy" "" "--system")
+    ("bsp" "" "--break-system-packages")
+    ("nby" "" "--no-binary")
+    ("ob" "" "--only-binary")
+    ("nbd" "" "--no-build")
+    ("st" "" "--strict")
+    ("dr" "" "--dry-run")
+    ]
+   ["Resolver options"
+    ("upg" "" "--upgrade")
+    ("upk" "" "--upgrade-package=")
+    ]
+   ["Installer options"
+    ("ri" "" "--reinstall")]
+   ["Python Options"
+    (uv-python-choice)]
+   ["Cache options"
+    (uv--no-cache)
+    (uv--refresh)]]
+  [["UV pip install command"
+    (uv-pip-install-command)]])
+
+(transient-define-prefix uv-pip-uninstall-menu ()
+  "UV pip uninstall transient interface."
+  [["Arguments"
+    ("pa" "" "--packages=")
+    ]
+   ["Options"
+    (uv-requirement-choice)
+    ("sy" "" "--system")
+    ("bsp" "" "--break-system-packages")
+    ]
+   ["Python Options"
+    (uv-python-choice)]
+   ["Cache options"
+    (uv--no-cache)
+    (uv--refresh)
+    ]]
+  [["UV pip uninstall command"
+    (uv-pip-uninstall-command)]])
+
 (transient-define-prefix uv-pip-sync-menu ()
   "UV pip sync transient interface."
-;:init-value 'uv-init-prefix-init
   [["Arguments"
     (uv-sync-requirements-choice)]
    ["Options"
@@ -447,14 +506,29 @@ directory" "--system-site-packages")
   (interactive)
   (uv-pip-sync-menu))
 
+(transient-define-suffix uv-pip-install ()
+  :key "in"
+  :description "install packages"
+  :transient t
+  (interactive)
+  (uv-pip-install-menu))
+
+(transient-define-suffix uv-pip-uninstall ()
+  :key "un"
+  :description "uninstall packages"
+  :transient t
+  (interactive)
+  (uv-pip-uninstall-menu))
+
+
 (transient-define-prefix uv-pip-menu ()
   "UV sync transient interface."
   :init-value 'uv-init-prefix-init
   ["Commands"
    (uv-pip-list)
    (uv-pip-show)
-   ;; ("install")
-   ;; ("uninstall")
+   (uv-pip-install)
+   (uv-pip-uninstall)
    (uv-pip-sync)]
   ["UV Python Options"
    (uv--no-cache)
@@ -467,6 +541,16 @@ directory" "--system-site-packages")
    (uv-run--command)
    (uv-run-command)]
   ["Run Options"
+   ("ae" "" "--all-extras" )
+   ("od" "" "--only-dev"   )
+   ("ne" "" "--no-editable")
+   ("ns" "" "--no-sync"    )
+   ("np" "" "--no-project" )
+   ("upg" "" "--upgrage"    )
+   ("in" "" "--reinstall"  )
+   ("nbd" "" "--no-build"   )
+   ("nby" "" "--no-binary"  )
+   (uv--no-cache)
    (uv-locked-choice)
    (uv-frozen-choice)
    (uv-no-dev-choice)
@@ -578,22 +662,19 @@ DESCRIPTION.  Apply all RE params to the shell command."
 					"--allow-empty-requirements"
 					"--no-allow-empty-requirements"
 					"--python-platform"
-					"--src="
-					)
+					"--src=")
 
 (uv--generate-transient-suffix-command uv-init-command "init" "t" "UV init"
-				       "--path="
 				       "--name="
 				       "--package"
 				       "--no-readme"
 				       "--python="
 				       "--config-file="
-				       )
-
+				       "--path=")
 
 (uv--generate-transient-suffix-command uv-python-install-command "python install" "i" "UV python install"
 				       "--no-cache"
-				       "--refresh"
+				       "--refresh")
 				       ;; TODO
 				       ;; uv--read-python-version-choice
 
@@ -602,21 +683,19 @@ DESCRIPTION.  Apply all RE params to the shell command."
 				       "--strict"
 				       "--system"
 				       "--no-cache"
-				       "--python="
-				       )
+				       "--python=")
 
 (uv--generate-transient-suffix-command uv-pip-show-command
 				       "pip show"
 				       "x"
 				       "UV pip show"
-				       "--package="
 				       "--strict"
 				       "--system"
 				       "--no-cache"
-				       "--python=")
+				       "--python="
+				       "--package=")
 
 (uv--generate-transient-suffix-command uv-venv-command "venv" "v" "UV venv"
-				       "--path="
 				       "--no-project"
 				       "--seed"
 				       "--relocatable"
@@ -625,7 +704,8 @@ DESCRIPTION.  Apply all RE params to the shell command."
 				       "--link-mode"
 				       "--allow-existing"
 				       "--keyring-provider"
-				       "--python=")
+				       "--python="
+				       "--path=")
 
 (uv--generate-transient-suffix-command uv-lock-command "lock" "k" "UV lock"
 				       "--locked"
@@ -634,11 +714,9 @@ DESCRIPTION.  Apply all RE params to the shell command."
 				       "--refresh"
 				       "--python="
 				       "--upgrade"
-				       "--no-sources"
-				       )
+				       "--no-sources")
 
 (uv--generate-transient-suffix-command uv-add-command "add" "a" "UV add"
-				       "--package="
 				       "--no-project"
 				       "--seed"
 				       "--dev"
@@ -653,8 +731,53 @@ DESCRIPTION.  Apply all RE params to the shell command."
 				       "--refresh"
 				       "--index-strategy="
 				       "--keyring-provider"
-				       "--python=")
+				       "--python="
+				       "--package=")
+
+(uv--generate-transient-suffix-command uv-pip-install-command "pip install" "pi" "Pip install"
+				       "--editable"
+				       "--extra"
+				       "--no-deps"
+				       "--system"
+				       "--requirement="
+				       "--python="
+				       "--break-system-packages"
+				       "--no-binary"
+				       "--only-binary"
+				       "--no-build"
+				       "--strict"
+				       "--dry-run"
+				       "--upgrade"
+				       "--upgrade-package="
+				       "--reinstall"
+				       "--no-cache"
+				       "--refresh"
+				       "--packages=")
+
+(uv--generate-transient-suffix-command uv-pip-uninstall-command "pip uninstall" "pu" "Pip uninstall"
+				       "--requirement="
+				       "--system"
+				       "--break-system-packages"
+				       "--python="
+				       "--no-cache"
+				       "--refresh"
+				       "--packages=")
 
 (uv--generate-transient-suffix-command uv-run-command "run" "r" "Run command"
+				       "--no-dev"
+				       "--all-extras"
+				       "--only-dev"
+				       "--no-editable"
+				       "--isolated"
+				       "--no-sync"
+				       "--locked"
+				       "--frozen"
+				       "--no-project"
+				       "--upgrage"
+				       "--reinstall"
+				       "--no-build"
+				       "--no-binary"
+				       "--no-cache"
+				       "--python="
 				       "--command=")
 (provide 'uv)
