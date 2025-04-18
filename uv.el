@@ -118,6 +118,8 @@ directory for the duration of the operation."
 	    "")
 	   ((guard (string= concatenated-flag flag))
 	    concatenated-flag)
+	   ((guard (string= flag "--version-choice="))
+	    (substring concatenated-flag (length "--version-choice=")))
 	   ((guard (string= flag "--path="))
 	    (substring concatenated-flag (length "--path=")))
 	   ((guard (string= flag "--package="))
@@ -173,9 +175,9 @@ Start execution in given UV--BUFFER-NAME."
 (transient-define-prefix uv-python-menu ()
   "UV python transient interface."
   ["Cache Options"
-   (uv--no-cache)
-   (uv--refresh)]
+   (uv--no-cache)]
   [["UV python command"
+    (uv-python-install-choice)
     (uv-python-install-command)]])
 
 (defun uv--get-available-pip-packages ()
@@ -222,6 +224,15 @@ Start execution in given UV--BUFFER-NAME."
   :description "The Python interpreter to use for the project environment."
   :argument "--python="
   :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
+
+(transient-define-argument uv-python-install-choice ()
+  "Execution Path Argument."
+  :class 'transient-option
+  :shortarg "vc"
+  :description "The Python interpreter to use for the project environment."
+  :argument "--version-choice="
+  :reader (lambda (_prompt _initial _history) (uv--read-python-version-choice)))
+
 
 (transient-define-argument uv-requirements-choice ()
   "Requirements File Path Argument."
@@ -674,7 +685,7 @@ DESCRIPTION.  Apply all RE params to the shell command."
 
 (uv--generate-transient-suffix-command uv-python-install-command "python install" "i" "UV python install"
 				       "--no-cache"
-				       "--refresh")
+				       "--version-choice=")
 				       ;; TODO
 				       ;; uv--read-python-version-choice
 
